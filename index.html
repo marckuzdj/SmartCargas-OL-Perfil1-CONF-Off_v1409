@@ -361,8 +361,8 @@
           <option value="RS">RS/RSW1 (TGESTIONA)</option>
           <option value="RO">RO/ROW1 (ATENTO)</option>
           <option value="SC">SC/SCW1 (ATENTO)</option>
-          <option value="SP">SP/SPW1-DSP1 (FEDEX)</option> 
-	   	    <option value="SP">SP/SPW1-DSP1 (ATENTO)</option> 
+         <!--   <option value="SP">SP/SPW1-DSP1 (FEDEX)</option>  -->
+	   	  <option value="SP">SP/SPW1-DSP1 (FEDEX/ATENTO)</option> 
           <option value="SE">SE/SEW1 (ATENTO)</option>
       </select>
     </div>
@@ -591,7 +591,7 @@
   window.console.log = function() {};
         
    //  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxeW2tRPFpnompPApN4XxeY2DWnZLoIzmzenf8zEdOXctNgtrw-l71ZLGn6QpTOTZkc/exec";
-     
+  //  const WEB_APP_URL = "https://google.com";
 // =========================================================================
 // NOVO: DICIONÁRIO MESTRE DE REDE (Ajuste os links de deploy de cada UF)
 // =========================================================================
@@ -610,7 +610,7 @@
 		  // "PA": "",
 		  // "PB": "",
 		   "PE": "https://script.google.com/macros/s/AKfycbyTKX7dTx8MvU4Qh6javYDxUfipriEBM-qThacTQDNV7QL-6CsIC2FOaqHA80KOcYg/exec",
-	     "PR": "https://script.google.com/macros/s/AKfycbz_VNwjmQ9hv3LkL5WHl2luVWZkrquNKPnPCXCyTXo4bYG8oSCTIqEtnCIIKt9fQtovrA/exec",
+	  	   "PR": "https://script.google.com/macros/s/AKfycbz_VNwjmQ9hv3LkL5WHl2luVWZkrquNKPnPCXCyTXo4bYG8oSCTIqEtnCIIKt9fQtovrA/exec",
       	  // "PI": "",
 		   "RJ": "https://script.google.com/macros/s/AKfycbwEvZj_QZdiFcoUJmd-1CNLTOJXe8vQ2eOmu85OhgXN_dES_s54sKHIPUFTtbvzVNclwg/exec",
 		  // "RN": "",
@@ -618,7 +618,7 @@
 		  // "RO": "",
 		   "SC": "https://script.google.com/macros/s/AKfycbyImZzz4VRzXF-UT_LLf4c93CYoqs3ojNycYCXk4ORM0Dz3nDIVDASGZIfA4ni3dC8H/exec", 
 		  // "SE": "", 
-       "SP": "https://script.google.com/macros/s/AKfycbycGHAZN01Fb2i9KHs3s0YXo7qdB2FPqoBFWasWyzV9DKbhCWIOprsjTseRJ-4GkfZpOg/exec"
+       	   "SP": "https://script.google.com/macros/s/AKfycbycGHAZN01Fb2i9KHs3s0YXo7qdB2FPqoBFWasWyzV9DKbhCWIOprsjTseRJ-4GkfZpOg/exec"
 	  // Adicione as demais UFs conforme criar as planilhas/scripts clonados...
 	};
 	
@@ -631,17 +631,29 @@
 
     // FUNÇÃO DE COMUNICAÇÃO - MÉTODO JSONP (O mais estável para GitHub)
     function callServer(action, params, callbackName) {
+        // 🔒 BARREIRA PREVENTIVA: Se a UF não estiver selecionada ainda (ex: no window.onload),
+        // aborta o disparo imediatamente para evitar o erro '<' no console.
+        if (typeof UF_SELECIONADA === 'undefined' || !UF_SELECIONADA) {
+            console.warn(`⚠️ [BLOQUEIO PREVENTIVO] Chamada para '${action}' retida. Aguardando seleção de UF.`);
+            return;
+        }
+
         const script = document.createElement('script');
-        let url = `${WEB_APP_URL}?action=${action}&callback=${callbackName}&_t=${new Date().getTime()}`;
+        
+        // 🌟 CORREÇÃO SÊNIOR APLICADA: Mapeamento dinâmico baseado no dicionário de chaves por Estado
+        let url = `${SCRIPTS_POR_UF[UF_SELECIONADA]}?action=${action}&callback=${callbackName}&_t=${new Date().getTime()}`;
+
         for (let key in params) { 
             url += `&${key}=${encodeURIComponent(params[key])}`; 
         }
+        
         script.src = url;
         // Adicionamos essa linha para garantir que o navegador trate como script
         script.type = "text/javascript"; 
         document.body.appendChild(script);
         script.onload = () => script.remove();
     }
+
 
     // CARREGAMENTO INICIAL
     window.onload = () => {
@@ -1110,7 +1122,14 @@ function enviarParaServidor(conteudo, liberacao) {
    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
    body: JSON.stringify(payload)
  })
- .then(response => response.json())
+ .then(response => {
+   // 🌟 BLINDAGEM DE REDE: Verifica se o Google respondeu com sucesso (Status 200)
+   // Se houver um timeout severo ou erro de servidor no Google, 'response.ok' será false
+   if (!response.ok) {
+     throw new Error(`Erro estrutural do Google Web App: Status HTTP ${response.status}`);
+   }
+   return response.json();
+ })
  .then(res => {
    // 4. DESBLOQUEIO COMPLETO DOS INPUTS APÓS RETORNO DO SERVIDOR
    if (fileInput) {
@@ -1135,6 +1154,11 @@ function enviarParaServidor(conteudo, liberacao) {
    btn.disabled = false;
    btn.innerHTML = 'Enviar Base';
    
+   // Garante que o objeto de resposta não seja nulo ou indefinido por quebra de stream
+   if (!res) {
+     throw new Error("Resposta do servidor veio vazia ou corrompida.");
+   }
+
    const textoMensagem = (res.mensagem || res.message || res.msg || "").toString();
    const statusLimpo = (res.status || res.Status || "").toString().toUpperCase();
    const isTrueSuccess = (res.success === true || res.Success === true || res.authorized === true);
@@ -1159,7 +1183,7 @@ function enviarParaServidor(conteudo, liberacao) {
      "<div style='text-align: left; line-height: 1.6;'>" +
      listaFormatada + "<br><br>" +
      "<p style='background: #fff3cd; color: #856404; padding: 10px; border-radius: 4px; border: 1px solid #ffeeba; margin: 5px 0;'> " +
-     "Estes romaneios já foram enviados anteriormente. Para reenviar, cancele cada um dos romaneio via link 'Alterar Romaneio'" +
+     "Estes romaneios já foram enviados anteriormente. Para reenviar, cancele cada Romaneio pelo link 'Alterar Romaneio'" +
      "</p> " +
      "</div>";
 
@@ -1236,23 +1260,21 @@ function enviarParaServidor(conteudo, liberacao) {
    
    btn.disabled = false;
    btn.innerHTML = 'Enviar Base';
-   exibirAviso('statusEnvio', 'Falha na comunicação: Verifique sua internet.', 'error');
+   
+   // 🌟 TRATAMENTO DINÂMICO DE ERRO: Identifica se o JSON quebrou (resposta corrompida do Google)
+   // ou se a internet caiu de fato.
+   if (err.toString().toUpperCase().indexOf("JSON") !== -1 || err.toString().toUpperCase().indexOf("STATUS HTTP") !== -1) {
+     exibirAviso('statusEnvio', 'O Google processou os dados, mas a resposta falhou por concorrência. Verifique a planilha.', 'error');
+   } else {
+     exibirAviso('statusEnvio', 'Falha na comunicação: Verifique sua internet.', 'error');
+   }
+   
    console.error("Erro crítico de conexão de rede:", err);
    if (typeof dispararLogOL === 'function') {
      dispararLogOL('ENVIO_CARGA_ERRO_REDE', `Queda física de comunicação ou timeout. Detalhes: [${err.toString()}]`);
    }
  });
-}
-
-
-
-
-
-
-
-
-
-
+} // 🌟 ESTA CHAVE ESTAVA FALTANDO! (Fecha a função principal enviarParaServidor)
             
             // NOVA FUNÇÃO: Executada apenas quando o operador clica no botão do modal
             function fecharModalSucesso() {
